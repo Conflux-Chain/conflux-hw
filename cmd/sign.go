@@ -4,22 +4,27 @@ import (
 	"encoding/hex"
 	"fmt"
 	"math/big"
+	"os"
+	"strconv"
 
 	"github.com/Conflux-Chain/go-conflux-sdk/types"
+	"github.com/Conflux-Chain/go-conflux-sdk/utils"
 	"github.com/spf13/cobra"
 )
 
-const (
-	defaultGasPrice int64 = 10
-	defaultGasLimit int64 = 21000
-)
-
 var (
-	nonce    uint32
-	to       string
-	valueStr string
-	epoch    uint64
-	chain    uint
+	from         string
+	nonce        uint32
+	to           string
+	priceStr     string
+	gasLimit     uint32
+	valueStr     string
+	storageLimit uint64
+	epoch        uint64
+	chain        uint
+	data         string
+
+	dripsPerCfx *big.Float = new(big.Float).SetInt(new(big.Int).Exp(big.NewInt(10), big.NewInt(18), nil))
 
 	signCmd = &cobra.Command{
 		Use:   "sign",
@@ -31,45 +36,59 @@ var (
 )
 
 func init() {
+	signCmd.PersistentFlags().StringVar(&from, "from", "0", "From address in HEX format or address index number")
+	signCmd.MarkPersistentFlagRequired("from")
+
 	signCmd.PersistentFlags().Uint32Var(&nonce, "nonce", 0, "Transaction nonce")
 	signCmd.MarkPersistentFlagRequired("nonce")
+
 	signCmd.PersistentFlags().StringVar(&to, "to", "", "To address in HEX format")
 	signCmd.MarkPersistentFlagRequired("to")
-	signCmd.PersistentFlags().StringVar(&valueStr, "value", "", "Value to transfer in drip")
+
+	signCmd.PersistentFlags().StringVar(&priceStr, "price", "10", "Gas price in drip")
+
+	signCmd.PersistentFlags().Uint32Var(&gasLimit, "gas", 21000, "Gas limit")
+
+	signCmd.PersistentFlags().StringVar(&valueStr, "value", "", "Value to transfer in CFX")
 	signCmd.MarkPersistentFlagRequired("value")
+
+	signCmd.PersistentFlags().Uint64Var(&storageLimit, "storage", 0, "Storage limit")
+
 	signCmd.PersistentFlags().Uint64Var(&epoch, "epoch", 0, "Transaction epoch height")
 	signCmd.MarkPersistentFlagRequired("epoch")
+
 	signCmd.PersistentFlags().UintVar(&chain, "chain", 2, "Conflux chain ID")
-	signCmd.PersistentFlags().StringVar(&password, "password", "", "Password to decrypt key file")
+
+	signCmd.PersistentFlags().StringVar(&data, "data", "", "Transaction data or encoded ABI data without 0x prefix")
 
 	rootCmd.AddCommand(signCmd)
 }
 
 func sign() {
-	from := mustGetOrCreateAccount()
-	value, ok := new(big.Int).SetString(valueStr, 10)
-	if !ok {
-		fmt.Println("invalid value")
-		return
-	}
-
 	tx := types.UnsignedTransaction{
 		UnsignedTransactionBase: types.UnsignedTransactionBase{
-			From:         &from,
+			From:         types.NewAddress(mustParseFrom()),
 			Nonce:        types.NewBigInt(int64(nonce)),
-			GasPrice:     types.NewBigInt(defaultGasPrice),
-			Gas:          types.NewBigInt(defaultGasLimit),
-			Value:        types.NewBigIntByRaw(value),
-			StorageLimit: types.NewUint64(0),
+			GasPrice:     types.NewBigIntByRaw(mustParsePrice()),
+			Gas:          types.NewBigInt(int64(gasLimit)),
+			Value:        types.NewBigIntByRaw(mustParseValue()),
+			StorageLimit: types.NewUint64(storageLimit),
 			EpochHeight:  types.NewUint64(epoch),
 			ChainID:      types.NewUint(chain),
 		},
 		To: types.NewAddress(to),
 	}
 
-	if len(password) == 0 {
-		password = mustInputPassword("Enter password: ")
+	if len(data) > 0 {
+		txData, err := utils.HexStringToBytes(data)
+		if err != nil {
+			fmt.Println("Invalid tx data:", err.Error())
+			return
+		}
+		tx.Data = txData
 	}
+
+	password := mustInputPassword("Enter password: ")
 
 	encoded, err := am.SignAndEcodeTransactionWithPassphrase(tx, password)
 	if err != nil {
@@ -77,5 +96,50 @@ func sign() {
 		return
 	}
 
+	fmt.Println("=======================================")
 	fmt.Println("0x" + hex.EncodeToString(encoded))
+}
+
+func mustParseFrom() string {
+	fromIndex, err := strconv.Atoi(from)
+	if err != nil {
+		return from
+	}
+
+	accounts := listAccountsAsc()
+	if len(accounts) == 0 {
+		fmt.Println("No account found!")
+		os.Exit(1)
+	}
+
+	if fromIndex >= len(accounts) {
+		fmt.Println("Invalid from index, it should be between 0 and", len(accounts)-1)
+		os.Exit(1)
+	}
+
+	fmt.Println("Sender:", accounts[fromIndex])
+
+	return accounts[fromIndex]
+}
+
+func mustParsePrice() *big.Int {
+	price, ok := new(big.Int).SetString(priceStr, 10)
+	if !ok {
+		fmt.Println("invalid number format for price")
+		os.Exit(1)
+	}
+
+	return price
+}
+
+func mustParseValue() *big.Int {
+	value, ok := new(big.Float).SetString(valueStr)
+	if !ok {
+		fmt.Println("invalid float format for value")
+		os.Exit(1)
+	}
+
+	result, _ := new(big.Float).Mul(value, dripsPerCfx).Int(nil)
+
+	return result
 }

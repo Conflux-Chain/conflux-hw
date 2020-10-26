@@ -3,62 +3,44 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"sort"
 
 	sdk "github.com/Conflux-Chain/go-conflux-sdk"
-	"github.com/Conflux-Chain/go-conflux-sdk/types"
-	"github.com/howeyc/gopass"
 	"github.com/spf13/cobra"
 )
 
 var (
-	password string
-	am       *sdk.AccountManager = sdk.NewAccountManager("keystore")
+	am *sdk.AccountManager = sdk.NewAccountManager("keystore")
 
 	rootCmd = &cobra.Command{
 		Use:   "conflux-hw",
 		Short: "Conflux hardware wallet tool",
 		Run: func(cmd *cobra.Command, args []string) {
-			fmt.Println("Account:", mustGetOrCreateAccount())
+			accounts := listAccountsAsc()
+			if len(accounts) == 0 {
+				fmt.Println("No account found!")
+				return
+			}
+
+			for i, addr := range accounts {
+				fmt.Printf("[%v]\t%v\n", i, addr)
+			}
+
+			fmt.Printf("Totally %v accounts found.\n", len(accounts))
 		},
 	}
 )
 
-func mustGetOrCreateAccount() types.Address {
-	if account, err := am.GetDefault(); err == nil {
-		return *account
+func listAccountsAsc() []string {
+	var accounts []string
+
+	for _, addr := range am.List() {
+		accounts = append(accounts, addr.String())
 	}
 
-	fmt.Println("Create an account, please input password for key file!")
+	sort.Strings(accounts)
 
-	passwd1 := mustInputPassword("Enter password: ")
-	passwd2 := mustInputPassword("Confirm password: ")
-
-	if passwd1 != passwd2 {
-		fmt.Println("Password mismatch!")
-		os.Exit(1)
-	}
-
-	password = passwd1
-
-	account, err := am.Create(password)
-	if err != nil {
-		fmt.Println("Failed to create account:", err.Error())
-		os.Exit(1)
-	}
-
-	return account
-}
-
-func mustInputPassword(prompt string) string {
-	fmt.Print(prompt)
-
-	passwd, err := gopass.GetPasswd()
-	if err != nil {
-		fmt.Println("Failed to read password:", err.Error())
-		os.Exit(1)
-	}
-
-	return string(passwd)
+	return accounts
 }
 
 // Execute is the command line entrypoint.

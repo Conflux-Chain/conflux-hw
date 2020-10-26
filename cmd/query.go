@@ -23,6 +23,7 @@ var (
 func init() {
 	queryCmd.PersistentFlags().StringVar(&url, "url", "http://main.confluxrpc.org", "Conflux RPC url")
 	queryCmd.PersistentFlags().StringVar(&account, "account", "", "Account address in HEX format")
+	queryCmd.MarkPersistentFlagRequired("account")
 
 	rootCmd.AddCommand(queryCmd)
 }
@@ -41,12 +42,7 @@ func query() {
 	}
 	fmt.Println("Epoch number:", epoch)
 
-	var address types.Address
-	if len(account) == 0 {
-		address = mustGetOrCreateAccount()
-	} else {
-		address = *types.NewAddress(account)
-	}
+	address := *types.NewAddress(account)
 
 	balance, err := client.GetBalance(address)
 	if err != nil {
