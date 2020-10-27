@@ -117,7 +117,7 @@ func mustParseFrom() string {
 		os.Exit(1)
 	}
 
-	fmt.Println("Sender:", accounts[fromIndex])
+	fmt.Println("Account:", accounts[fromIndex])
 
 	return accounts[fromIndex]
 }
