@@ -6,6 +6,7 @@ import (
 	"math/big"
 	"os"
 	"strconv"
+	"strings"
 
 	"github.com/Conflux-Chain/go-conflux-sdk/types"
 	"github.com/Conflux-Chain/go-conflux-sdk/utils"
@@ -103,7 +104,7 @@ func sign() {
 func mustParseFrom() string {
 	fromIndex, err := strconv.Atoi(from)
 	if err != nil {
-		return from
+		return strings.ToLower(from)
 	}
 
 	accounts := listAccountsAsc()
